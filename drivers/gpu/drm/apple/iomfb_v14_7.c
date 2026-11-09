@@ -2260,6 +2260,11 @@ const char *iomfb_v14_7_external_busy(struct apple_dcp *dcp)
 	}
 }
 
+bool iomfb_v14_7_external_starting(struct apple_dcp *dcp)
+{
+	return smp_load_acquire(&dcp->external_phase) == DCPEXT_STARTING;
+}
+
 bool iomfb_v14_7_external_failed(struct apple_dcp *dcp)
 {
 	return smp_load_acquire(&dcp->external_phase) == DCPEXT_FAILED ||

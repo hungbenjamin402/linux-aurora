@@ -204,6 +204,17 @@ bool hdmi_audio = true;
 module_param(hdmi_audio, bool, 0644);
 MODULE_PARM_DESC(hdmi_audio, "Enable DP/HDMI audio support (default: on)");
 
+/*
+ * Refuse system sleep whenever an external display is attached or its link
+ * is up, as before resume was shown to bring direct DP-alt and HDMI displays
+ * back (#121). Off by default; Thunderbolt tunnels and starting firmware are
+ * refused regardless (see dcp_external_sleep_vetoed()).
+ */
+static bool external_sleep_veto;
+module_param(external_sleep_veto, bool, 0644);
+MODULE_PARM_DESC(external_sleep_veto,
+		 "Refuse system sleep while any external display is attached (default: only Thunderbolt-tunnelled displays and starting firmware)");
+
 static bool unstable_edid = true;
 module_param(unstable_edid, bool, 0644);
 MODULE_PARM_DESC(unstable_edid, "Enable unstable EDID retrival support");
@@ -4913,13 +4924,32 @@ static void dcp_release_after_sleep(struct apple_dcp *dcp)
 }
 
 /*
+ * Whether an attached display or a held link keeps the system awake: on
+ * request (external_sleep_veto), or while the display runs over a
+ * Thunderbolt tunnel, which does not come back after resume yet (#162).
+ * Called with hpd_mutex held, which serializes the route.
+ */
+static bool dcp_external_sleep_strict(struct apple_dcp *dcp)
+{
+	struct apple_dcp_typec_route *route;
+
+	lockdep_assert_held(&dcp->hpd_mutex);
+	if (READ_ONCE(external_sleep_veto))
+		return true;
+	route = READ_ONCE(dcp->active_typec_route);
+	return route && route->tunnel;
+}
+
+/*
  * Why an external processor must keep the system awake, or NULL. The manual
  * path refuses sleep once its firmware was ever started. A native processor
- * refuses while its firmware starts or holds a display link, and while a
- * display is attached to it at all, lit or not: resume does not bring an
- * attached display back. Idle with nothing attached, its firmware stays
- * powered across s2idle like the panel's (the gate holds its CPU domain at
- * the active floor) and the next attach reconnects through it.
+ * refuses while its firmware starts, and while a display runs over a
+ * Thunderbolt tunnel (#162). A direct DP-alt or HDMI display, lit or not,
+ * sleeps with the system: suspend tears its link down and resume brings it
+ * back through hotplug (#121). external_sleep_veto restores the old refusal
+ * for any attached display. Its firmware stays powered across s2idle like
+ * the panel's (the gate holds its CPU domain at the active floor) and the
+ * next attach reconnects through it.
  *
  * A processor that failed (its start, or its session later) never refuses
  * sleep: it drives no display until reboot, attached or not, and its power
@@ -4935,18 +4965,27 @@ static const char *dcp_external_sleep_vetoed(struct apple_dcp *dcp)
 			dcpext_scanout_requested(dcp)) ?
 		       "external firmware/scanout attempted" : NULL;
 	why = iomfb_v14_7_external_busy(dcp);
-	if (why)
+	/*
+	 * A starting firmware has no state to save or restore. A held link is
+	 * only refused on request or across a Thunderbolt tunnel: the suspend
+	 * path tears a direct DP-alt or HDMI link down and resume brings the
+	 * display back through the normal hotplug path.
+	 */
+	if (why && (iomfb_v14_7_external_starting(dcp) ||
+		    dcp_external_sleep_strict(dcp)))
 		return why;
 	if (iomfb_v14_7_external_failed(dcp)) {
 		if (dcp->v14)
 			dev_info(dcp->dev, "external display processor failed earlier: sleeping with it as it is\n");
 		return NULL;
 	}
+	if (!dcp_external_sleep_strict(dcp))
+		return NULL;
 	if (READ_ONCE(dcp->active_typec_route) || READ_ONCE(dcp->typec_cable_connected))
-		return "a USB-C display is attached";
+		return why ?: "a USB-C display is attached";
 	if (dcp->hdmi_hpd && gpiod_get_value_cansleep(dcp->hdmi_hpd) > 0)
-		return "an HDMI display is attached";
-	return NULL;
+		return why ?: "an HDMI display is attached";
+	return why;
 }
 
 /* dpm_prepare completes for every device before any dpm_suspend callback.

@@ -58,6 +58,8 @@ bool iomfb_v14_7_external_ready(struct apple_dcp *dcp);
 void iomfb_v14_7_external_refuse(struct apple_dcp *dcp, const char *why);
 int iomfb_v14_7_external_open(struct apple_dcp *dcp);
 const char *iomfb_v14_7_external_busy(struct apple_dcp *dcp);
+/* The external firmware is starting: nothing to save or restore yet. */
+bool iomfb_v14_7_external_starting(struct apple_dcp *dcp);
 /* The external session can no longer be used until reboot. */
 bool iomfb_v14_7_external_failed(struct apple_dcp *dcp);
 /* The attached display is powered (A472 on) in the mode last set. */

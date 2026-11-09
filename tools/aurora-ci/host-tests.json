@@ -2219,6 +2219,15 @@
    "note": "Production full firmware lookup against T6031 rows; exact J514C identity and other-board refusal. Public synthetic inputs only; no firmware images."
   },
   {
+   "name": "tools/asahi/dcp-external-sleep-tests.py",
+   "group": "tools",
+   "argv": [
+    "python3",
+    "tools/asahi/dcp-external-sleep-tests.py"
+   ],
+   "note": "Production dcp_external_sleep_vetoed() policy: starting firmware and Thunderbolt-tunnelled displays refuse sleep; direct DP-alt and HDMI displays sleep; external_sleep_veto=1 restores the old refusal; failed and manual paths unchanged."
+  },
+  {
    "name": "tools/asahi/g15-t6034-profile-tests.py",
    "group": "tools",
    "argv": [
