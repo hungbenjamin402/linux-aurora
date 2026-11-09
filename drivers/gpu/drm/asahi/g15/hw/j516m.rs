@@ -25,6 +25,13 @@ pub(crate) const CONFIG: Config = Config {
     ..super::t6034::CONFIG
 };
 
+/// Fused-core masks measured on J516M boards. Each enables 30 cores, split 8/8/7/7
+/// across the four ten-slot clusters; which slot is fused off differs per die.
+const MEASURED_CORE_MASKS: [u64; 2] = [
+    0x7b5ed7f5fd, // [0x1fd, 0x1fd, 0x1ed, 0x1ed]
+    0x73df57f5fd, // [0x1fd, 0x1fd, 0x1f5, 0x1cf]
+];
+
 pub(crate) fn identity_matches(version: u32, counts: u32, cores: u64) -> bool {
-    version == 0x07041100 && counts == 0x0021040a && cores == 0x7b5ed7f5fd
+    version == 0x07041100 && counts == 0x0021040a && MEASURED_CORE_MASKS.contains(&cores)
 }
